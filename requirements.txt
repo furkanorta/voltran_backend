@@ -2,4 +2,5 @@ fastapi
 uvicorn
 httpx
 python-dotenv
+cloudinary
 python-multipart
