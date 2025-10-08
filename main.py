@@ -24,8 +24,8 @@ CLOUD_NAME = os.getenv("CLOUD_NAME")
 CLOUD_API_KEY = os.getenv("CLOUD_API_KEY")
 CLOUD_API_SECRET = os.getenv("CLOUD_API_SECRET")
 
-# GÜNCELLENDİ: 'dev' etiketi kaldırıldı, kararlı sürüme geçildi.
-FAL_URL = "https://fal.run/fal-ai/flux/image-to-image" 
+# GÜNCELLENDİ: Model yolu 'image-to-image' kaldırıldı. Sadece model adı 'flux' kullanılıyor.
+FAL_URL = "https://fal.run/fal-ai/flux" 
 
 # Cloudinary config
 try:
@@ -86,14 +86,14 @@ async def create_job(prompt: str = Form(...), image: UploadFile = File(...)):
 
         # Cloudinary'ye upload et
         if not all([CLOUD_NAME, CLOUD_API_KEY, CLOUD_API_SECRET]):
-             logger.error("Cloudinary ortam değişkenleri eksik.")
-             return JSONResponse(status_code=500, content={"error": "Cloudinary ortam değişkenleri eksik."})
+            logger.error("Cloudinary ortam değişkenleri eksik.")
+            return JSONResponse(status_code=500, content={"error": "Cloudinary ortam değişkenleri eksik."})
 
         public_url = upload_to_cloudinary(tmp_file_path)
 
         if not FAL_API_KEY:
-             logger.error("FAL_API_KEY ortam değişkeni ayarlanmamış.")
-             return JSONResponse(
+            logger.error("FAL_API_KEY ortam değişkeni ayarlanmamış.")
+            return JSONResponse(
                 status_code=500,
                 content={"error": "FAL_API_KEY ortam değişkeni ayarlanmamış."},
             )
@@ -103,6 +103,7 @@ async def create_job(prompt: str = Form(...), image: UploadFile = File(...)):
             "Content-Type": "application/json"
         }
 
+        # Payload yapısı Fal.ai'nin beklentisine göre iki katmanlıdır.
         payload = {
             "input": {
                 "prompt": prompt,
