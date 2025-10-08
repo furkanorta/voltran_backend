@@ -103,11 +103,10 @@ async def create_job(prompt: str = Form(...), image: UploadFile = File(...)):
             "Content-Type": "application/json"
         }
 
-        # Payload yapısı seedream-v4 için de geçerlidir.
-        payload = {
-            "prompt": prompt,
-            "image_url": public_url
-        }
+        payload = [{
+         "prompt": prompt,
+        "image_urls": [public_url]
+        }]
         
         logger.info("Fal.ai'ye istek gönderiliyor...")
 
