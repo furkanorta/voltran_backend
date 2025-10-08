@@ -24,8 +24,9 @@ CLOUD_NAME = os.getenv("CLOUD_NAME")
 CLOUD_API_KEY = os.getenv("CLOUD_API_KEY")
 CLOUD_API_SECRET = os.getenv("CLOUD_API_SECRET")
 
-# GÜNCELLENDİ: Model yolu 'image-to-image' kaldırıldı. Sadece model adı 'flux' kullanılıyor.
-FAL_URL = "https://fal.run/fal-ai/flux" 
+# GÜNCELLENDİ: Sınav gereksinimi doğrultusunda 'nano-banana' (resmi Fal.ai yolu) modeline geçiş yapıldı.
+# nano-banana'nın resmi API yolu şudur:
+FAL_URL = "https://fal.run/gemini-2-5-flash-image-preview" 
 
 # Cloudinary config
 try:
@@ -103,8 +104,9 @@ async def create_job(prompt: str = Form(...), image: UploadFile = File(...)):
             "Content-Type": "application/json"
         }
 
-        # GÜNCELLENDİ: Fal.ai'nin artık 'input' kapsayıcısı yerine
-        # doğrudan gövdede 'prompt' ve 'image_url' beklediği varsayılıyor.
+        # Payload yapısı aynı kalıyor. nano-banana da prompt ve image_url bekler.
+        # İpucu: nano-banana ile daha iyi sonuç almak için prompt'a orijinal resmi tarif eden
+        # detaylar eklemek iyi olabilir.
         payload = {
             "prompt": prompt,
             "image_url": public_url
