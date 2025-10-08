@@ -62,21 +62,21 @@ def upload_to_cloudinary(local_file_path: str) -> str:
 
 
 @app.post("/api/jobs")
-async def create_job(prompt: str = Form(...), file: UploadFile = File(...)):
+async def create_job(prompt: str = Form(...), image: UploadFile = File(...)): # 'file' yerine 'image' kullanıldı
     tmp_file_path = None
-    logger.info(f"İstek alındı. Prompt: {prompt[:50]}..., Dosya: {file.filename}")
+    logger.info(f"İstek alındı. Prompt: {prompt[:50]}..., Dosya: {image.filename}") # Log güncellendi
     
     try:
         # Geçici dosya oluştur
-        suffix = os.path.splitext(file.filename)[1]
+        suffix = os.path.splitext(image.filename)[1] # 'file' yerine 'image' kullanıldı
         
         # Geçici dosya oluştur ve içeriği kopyala
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-            shutil.copyfileobj(file.file, tmp)
+            shutil.copyfileobj(image.file, tmp) # 'file.file' yerine 'image.file' kullanıldı
             tmp_file_path = tmp.name
         
         # UploadedFile'ı kapat
-        await file.close()
+        await image.close() # 'file.close()' yerine 'image.close()' kullanıldı
 
         # Cloudinary'ye upload et
         if not all([CLOUD_NAME, CLOUD_API_KEY, CLOUD_API_SECRET]):
