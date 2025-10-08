@@ -25,7 +25,7 @@ CLOUD_API_KEY = os.getenv("CLOUD_API_KEY")
 CLOUD_API_SECRET = os.getenv("CLOUD_API_SECRET")
 
 # GÜNCELLENDİ: 'nano-banana' URL hatası nedeniyle sınav gereksinimindeki diğer model olan 'seedream-v4'e geçiş yapıldı.
-FAL_URL = "https://fal.run/fal-ai/seedream-v4" 
+FAL_URL = "https://fal.run/fal-ai/bytedance/seedream/v4/edit" 
 
 # Cloudinary config
 try:
