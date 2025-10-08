@@ -103,10 +103,10 @@ async def create_job(prompt: str = Form(...), image: UploadFile = File(...)):
             "Content-Type": "application/json"
         }
 
-        payload = [{
+        payload = {
          "prompt": prompt,
         "image_urls": [public_url]
-        }]
+        }
         
         logger.info("Fal.ai'ye istek gönderiliyor...")
 
