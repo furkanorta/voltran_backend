@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -7,7 +7,7 @@ import os
 from dotenv import load_dotenv
 import traceback
 
-# Ortam değişkenlerini yükle (.env dosyasından)
+# Ortam değişkenlerini yükle
 load_dotenv()
 FAL_API_KEY = os.getenv("FAL_API_KEY")
 
@@ -15,9 +15,9 @@ FAL_API_KEY = os.getenv("FAL_API_KEY")
 FAL_URL = "https://fal.run/fal-ai/flux/dev/image-to-image"
 
 # FastAPI instance
-app = FastAPI()
+app = FastAPI(title="Voltran Backend API 🚀")
 
-# CORS (frontend bağlantısı için)
+# CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # Prod'da domain ekle
@@ -32,6 +32,48 @@ class JobRequest(BaseModel):
     image_base64: str
 
 
+# API sınıfı
+class FalAPI:
+    def __init__(self, api_key: str):
+        self.api_key = api_key
+        self.url = FAL_URL
+
+    async def send_job(self, prompt: str, image_base64: str):
+        if not self.api_key:
+            raise HTTPException(status_code=500, detail="FAL_API_KEY ortam değişkeni ayarlanmamış.")
+
+        # 5MB boyut limiti (~7MB base64 hali)
+        if len(image_base64) > 7 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="Görsel verisi çok büyük. Maksimum 5MB.")
+
+        headers = {
+            "Authorization": f"Key {self.api_key}",
+            "Content-Type": "application/json"
+        }
+
+        payload = {
+            "prompt": prompt,
+            "image_base64": image_base64
+        }
+
+        async with httpx.AsyncClient(timeout=180) as client:
+            response = await client.post(self.url, headers=headers, json=payload)
+
+        if response.status_code != 200:
+            try:
+                content = response.json()
+            except:
+                content = {"error": "Fal.ai'den beklenmedik yanıt.", "details": response.text}
+            raise HTTPException(status_code=502, detail=content)
+
+        return response.json()
+
+
+# FalAPI örneği
+fal_api = FalAPI(FAL_API_KEY)
+
+
+# Routes
 @app.get("/")
 def home():
     return {"message": "Voltran Backend API çalışıyor 🚀"}
@@ -40,49 +82,10 @@ def home():
 @app.post("/api/jobs")
 async def create_job(request: JobRequest):
     try:
-        prompt = request.prompt
-        image_data_url = request.image_base64
-
-        # Görsel boyut kontrolü (yaklaşık 5MB limit)
-        if len(image_data_url) > 7 * 1024 * 1024:
-            return JSONResponse(
-                status_code=413,
-                content={"error": "Görsel verisi çok büyük. Maksimum 5MB dosya boyutu limitini aşıyor."},
-            )
-
-        if not FAL_API_KEY:
-            return JSONResponse(
-                status_code=500,
-                content={"error": "FAL_API_KEY ortam değişkeni ayarlanmamış."},
-            )
-
-        headers = {
-            "Authorization": f"Key {FAL_API_KEY}",
-            "Content-Type": "application/json"
-        }
-
-        payload = {
-            "input": {
-                "prompt": prompt,
-                "image_url": image_data_url
-            }
-        }
-
-        async with httpx.AsyncClient(timeout=180) as client:
-            response = await client.post(FAL_URL, headers=headers, json=payload)
-
-        if response.status_code != 200:
-            print("Fal.ai API Hatası:", response.status_code, response.text)
-            try:
-                content = response.json()
-            except:
-                content = {"error": "Fal.ai'den beklenmedik yanıt.", "details": response.text}
-
-            return JSONResponse(status_code=502, content=content)
-
-        data = response.json()
-        return {"status": "success", "result": data}
-
+        result = await fal_api.send_job(request.prompt, request.image_base64)
+        return {"status": "success", "result": result}
+    except HTTPException as e:
+        raise e
     except Exception as e:
         print("Backend Hatası:", traceback.format_exc())
         return JSONResponse(
