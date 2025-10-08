@@ -24,7 +24,8 @@ CLOUD_NAME = os.getenv("CLOUD_NAME")
 CLOUD_API_KEY = os.getenv("CLOUD_API_KEY")
 CLOUD_API_SECRET = os.getenv("CLOUD_API_SECRET")
 
-FAL_URL = "https://fal.run/fal-ai/flux/dev/image-to-image"
+# GÜNCELLENDİ: 'dev' etiketi kaldırıldı, kararlı sürüme geçildi.
+FAL_URL = "https://fal.run/fal-ai/flux/image-to-image" 
 
 # Cloudinary config
 try:
