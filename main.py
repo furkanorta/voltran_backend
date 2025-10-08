@@ -76,10 +76,8 @@ async def create_job(request: JobRequest):
         }
 
         payload = {
-            "input": {
-                "prompt": prompt,
-                "image_url": image_data_url 
-            }
+                "prompt": request.prompt,
+                "image_base64": request.image_base64 
         }
 
         # 3. Fal.ai'ye isteği gönder (Timeout 5 dakikaya yükseltildi)
