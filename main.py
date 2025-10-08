@@ -8,6 +8,12 @@ import shutil
 from dotenv import load_dotenv
 import cloudinary
 import cloudinary.uploader
+import logging
+import traceback
+
+# Logging ayarları
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # .env dosyasını yükle
 load_dotenv()
@@ -20,11 +26,15 @@ CLOUD_API_SECRET = os.getenv("CLOUD_API_SECRET")
 FAL_URL = "https://fal.run/fal-ai/flux/dev/image-to-image"
 
 # Cloudinary config
-cloudinary.config(
-    cloud_name=CLOUD_NAME,
-    api_key=CLOUD_API_KEY,
-    api_secret=CLOUD_API_SECRET
-)
+try:
+    cloudinary.config(
+        cloud_name=CLOUD_NAME,
+        api_key=CLOUD_API_KEY,
+        api_secret=CLOUD_API_SECRET
+    )
+    logger.info("Cloudinary konfigürasyonu başarılı.")
+except Exception as e:
+    logger.error(f"Cloudinary konfigürasyon hatası: {e}")
 
 # FastAPI instance
 app = FastAPI()
@@ -38,26 +48,46 @@ app.add_middleware(
     allow_credentials=True,
 )
 
+# Basit test route
+@app.get("/")
+def home():
+    return {"message": "Voltran Backend API çalışıyor 🚀"}
+
 # Upload fonksiyonu
 def upload_to_cloudinary(local_file_path: str) -> str:
-    res = cloudinary.uploader.upload(local_file_path)
+    # Upload işlemi sırasında 300 saniye (5 dakika) timeout süresi tanımlandı
+    res = cloudinary.uploader.upload(local_file_path, timeout=300) 
+    logger.info(f"Cloudinary'ye yükleme başarılı. URL: {res.get('secure_url')}")
     return res['secure_url']
 
 
 @app.post("/api/jobs")
 async def create_job(prompt: str = Form(...), file: UploadFile = File(...)):
+    tmp_file_path = None
+    logger.info(f"İstek alındı. Prompt: {prompt[:50]}..., Dosya: {file.filename}")
+    
     try:
         # Geçici dosya oluştur
         suffix = os.path.splitext(file.filename)[1]
+        
+        # Geçici dosya oluştur ve içeriği kopyala
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
             shutil.copyfileobj(file.file, tmp)
             tmp_file_path = tmp.name
+        
+        # UploadedFile'ı kapat
+        await file.close()
 
         # Cloudinary'ye upload et
+        if not all([CLOUD_NAME, CLOUD_API_KEY, CLOUD_API_SECRET]):
+             logger.error("Cloudinary ortam değişkenleri eksik.")
+             return JSONResponse(status_code=500, content={"error": "Cloudinary ortam değişkenleri eksik."})
+
         public_url = upload_to_cloudinary(tmp_file_path)
 
         if not FAL_API_KEY:
-            return JSONResponse(
+             logger.error("FAL_API_KEY ortam değişkeni ayarlanmamış.")
+             return JSONResponse(
                 status_code=500,
                 content={"error": "FAL_API_KEY ortam değişkeni ayarlanmamış."},
             )
@@ -73,22 +103,48 @@ async def create_job(prompt: str = Form(...), file: UploadFile = File(...)):
                 "image_url": public_url
             }
         }
+        
+        logger.info("Fal.ai'ye istek gönderiliyor...")
 
-        async with httpx.AsyncClient(timeout=180) as client:
+        # Timeout süresi 300 saniyeye yükseltildi
+        async with httpx.AsyncClient(timeout=300) as client:
             response = await client.post(FAL_URL, headers=headers, json=payload)
 
+        logger.info(f"Fal.ai'den yanıt alındı. Status: {response.status_code}")
+        
         if response.status_code != 200:
             try:
                 content = response.json()
-            except:
+            except Exception as parse_e:
+                logger.error(f"Fal.ai yanıtı JSON'a dönüştürülemedi: {parse_e}")
                 content = {"error": "Fal.ai'den beklenmedik yanıt.", "details": response.text}
+            
+            # Fal.ai hatalarını 502 Bad Gateway olarak döndür
             return JSONResponse(status_code=502, content=content)
 
         data = response.json()
         return {"status": "success", "result": data}
 
+    except httpx.TimeoutException:
+        logger.error("Fal.ai isteği zaman aşımına uğradı (300 saniye).")
+        return JSONResponse(
+            status_code=504, # Gateway Timeout daha uygun
+            content={"error": "Görsel oluşturma isteği zaman aşımına uğradı. Lütfen daha sonra tekrar deneyin."},
+        )
+
     except Exception as e:
+        error_details = traceback.format_exc()
+        logger.error(f"İşlem sırasında beklenmedik hata: {str(e)}\n{error_details}")
         return JSONResponse(
             status_code=500,
             content={"error": "Sunucu hatası oluştu.", "details": str(e)},
         )
+        
+    finally:
+        # **KRİTİK:** Geçici dosyayı sil
+        if tmp_file_path and os.path.exists(tmp_file_path):
+            try:
+                os.remove(tmp_file_path)
+                logger.info(f"Geçici dosya başarıyla silindi: {tmp_file_path}")
+            except Exception as e:
+                logger.error(f"Geçici dosya silinirken hata: {e}")
