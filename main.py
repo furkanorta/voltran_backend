@@ -103,12 +103,11 @@ async def create_job(prompt: str = Form(...), image: UploadFile = File(...)):
             "Content-Type": "application/json"
         }
 
-        # Payload yapısı Fal.ai'nin beklentisine göre iki katmanlıdır.
+        # GÜNCELLENDİ: Fal.ai'nin artık 'input' kapsayıcısı yerine
+        # doğrudan gövdede 'prompt' ve 'image_url' beklediği varsayılıyor.
         payload = {
-            "input": {
-                "prompt": prompt,
-                "image_url": public_url
-            }
+            "prompt": prompt,
+            "image_url": public_url
         }
         
         logger.info("Fal.ai'ye istek gönderiliyor...")
