@@ -26,7 +26,7 @@ CLOUD_API_SECRET = os.getenv("CLOUD_API_SECRET")
 
 # GÜNCELLENDİ: Sınav gereksinimi doğrultusunda 'nano-banana' (resmi Fal.ai yolu) modeline geçiş yapıldı.
 # nano-banana'nın resmi API yolu şudur:
-FAL_URL = "https://fal.run/gemini-2-5-flash-image-preview" 
+FAL_URL = "https://fal.run/fal-ai/gemini-2-5-flash-image-preview"
 
 # Cloudinary config
 try:
