@@ -10,6 +10,7 @@ import cloudinary
 import cloudinary.uploader
 import logging
 import traceback
+import contextlib # Yeni import
 
 # Logging ayarları
 logging.basicConfig(level=logging.INFO)
@@ -61,22 +62,26 @@ def upload_to_cloudinary(local_file_path: str) -> str:
     return res['secure_url']
 
 
-@app.post("/api/jobs")
-async def create_job(prompt: str = Form(...), image: UploadFile = File(...)): # 'file' yerine 'image' kullanıldı
+# Endpoint adını değiştirdik: /api/generate
+@app.post("/api/generate") 
+async def create_job(prompt: str = Form(...), image: UploadFile = File(...)):
     tmp_file_path = None
-    logger.info(f"İstek alındı. Prompt: {prompt[:50]}..., Dosya: {image.filename}") # Log güncellendi
+    logger.info(f"İstek alındı. Prompt: {prompt[:50]}..., Dosya: {image.filename}") 
     
     try:
-        # Geçici dosya oluştur
-        suffix = os.path.splitext(image.filename)[1] # 'file' yerine 'image' kullanıldı
+        # Geçici dosya oluşturma ve içeriği kopyalama (Daha güvenli hale getirildi)
+        suffix = os.path.splitext(image.filename)[1]
         
-        # Geçici dosya oluştur ve içeriği kopyala
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-            shutil.copyfileobj(image.file, tmp) # 'file.file' yerine 'image.file' kullanıldı
+        with contextlib.ExitStack() as stack:
+            # Geçici dosyayı oluştur
+            tmp = stack.enter_context(tempfile.NamedTemporaryFile(delete=False, suffix=suffix))
             tmp_file_path = tmp.name
-        
+            
+            # Yüklenen dosyayı geçici dosyaya kopyala
+            shutil.copyfileobj(image.file, tmp)
+            
         # UploadedFile'ı kapat
-        await image.close() # 'file.close()' yerine 'image.close()' kullanıldı
+        await image.close()
 
         # Cloudinary'ye upload et
         if not all([CLOUD_NAME, CLOUD_API_KEY, CLOUD_API_SECRET]):
