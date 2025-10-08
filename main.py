@@ -1,74 +1,66 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
 import httpx
 import os
+import tempfile
+import shutil
 from dotenv import load_dotenv
-import base64
-import traceback
-import re # Düzenli ifadeler için eklendi
+import cloudinary
+import cloudinary.uploader
 
 # .env dosyasını yükle
 load_dotenv()
-FAL_API_KEY = os.getenv("FAL_API_KEY")
 
-# Fal.ai image-to-image endpoint
+FAL_API_KEY = os.getenv("FAL_API_KEY")
+CLOUD_NAME = os.getenv("CLOUD_NAME")
+CLOUD_API_KEY = os.getenv("CLOUD_API_KEY")
+CLOUD_API_SECRET = os.getenv("CLOUD_API_SECRET")
+
 FAL_URL = "https://fal.run/fal-ai/flux/dev/image-to-image"
+
+# Cloudinary config
+cloudinary.config(
+    cloud_name=CLOUD_NAME,
+    api_key=CLOUD_API_KEY,
+    api_secret=CLOUD_API_SECRET
+)
 
 # FastAPI instance
 app = FastAPI()
 
-# Gelen JSON isteğinin yapısını tanımlayan Pydantic modeli
-class JobRequest(BaseModel):
-    # prompt: Kullanıcının metin istemi (String)
-    prompt: str
-    # image_base64: Base64 kodlanmış görsel verisi. 
-    # Mümkünse Data URI (data:image/jpeg;base64,...) olmalı, ancak ham base64 de kabul edilir.
-    image_base64: str 
-
-
-# CORS ayarı
+# CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # Prod'da sadece frontend domain ekle
     allow_methods=["*"],
     allow_headers=["*"],
     allow_credentials=True,
 )
 
-# Basit test route
-@app.get("/")
-def home():
-    return {"message": "Voltran Backend API çalışıyor 🚀"}
+# Upload fonksiyonu
+def upload_to_cloudinary(local_file_path: str) -> str:
+    res = cloudinary.uploader.upload(local_file_path)
+    return res['secure_url']
 
-# Image-to-image endpoint
+
 @app.post("/api/jobs")
-async def create_job(request: JobRequest):
+async def create_job(prompt: str = Form(...), file: UploadFile = File(...)):
     try:
-        prompt = request.prompt
-        input_image_b64_data = request.image_base64
-        
-        # 1. Base64 Verisini Fal.ai'nin Beklediği Data URI Formatına Çevir (KRİTİK ADIM)
-        # Bu, Postman'den sadece ham Base64 gelse bile, Data URI'yi doğru oluşturmayı sağlar.
-        
-        # Eğer veri zaten "data:" ile başlıyorsa, aynen kullan.
-        if input_image_b64_data.startswith("data:"):
-            image_data_url = input_image_b64_data
-        else:
-            # Ham Base64 stringi ise, yaygın MIME tipini varsayarak Data URI oluştur.
-            # (Bu, Postman'de tam formatı girmeyi unuttuğunuz durumlar için bir önlemdir.)
-            # Gerçek uygulamada, frontend'den MIME tipini almanız gerekir. Burada 'image/jpeg' varsayıyoruz.
-            image_data_url = f"data:image/jpeg;base64,{input_image_b64_data}"
+        # Geçici dosya oluştur
+        suffix = os.path.splitext(file.filename)[1]
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            shutil.copyfileobj(file.file, tmp)
+            tmp_file_path = tmp.name
 
-        # Boyut Kontrolü: Base64 stringin uzunluğunu kontrol et.
-        if len(image_data_url) > 7 * 1024 * 1024:
-             return JSONResponse(status_code=413, content={"error": "Görsel verisi çok büyük. Maksimum 5MB dosya boyutu limitini aşıyor."})
+        # Cloudinary'ye upload et
+        public_url = upload_to_cloudinary(tmp_file_path)
 
-        # 2. Fal.ai API'si için Header ve Payload hazırla
         if not FAL_API_KEY:
-             return JSONResponse(status_code=500, content={"error": "FAL_API_KEY ortam değişkeni ayarlanmamış."})
-
+            return JSONResponse(
+                status_code=500,
+                content={"error": "FAL_API_KEY ortam değişkeni ayarlanmamış."},
+            )
 
         headers = {
             "Authorization": f"Key {FAL_API_KEY}",
@@ -76,33 +68,27 @@ async def create_job(request: JobRequest):
         }
 
         payload = {
-                "prompt": request.prompt,
-                "image_base64": request.image_base64 
+            "input": {
+                "prompt": prompt,
+                "image_url": public_url
+            }
         }
 
-        # 3. Fal.ai'ye isteği gönder (Timeout 5 dakikaya yükseltildi)
-        async with httpx.AsyncClient(timeout=300) as client:
+        async with httpx.AsyncClient(timeout=180) as client:
             response = await client.post(FAL_URL, headers=headers, json=payload)
 
-            if response.status_code != 200:
-                print("Fal.ai API Hatası:", response.status_code, response.text)
-                try:
-                    content = response.json()
-                    # Fal.ai'den 422 gelirse, detayları direk döndürelim.
-                    if response.status_code == 422:
-                        return JSONResponse(status_code=422, content=content)
-                except:
-                    content = {"error": "Fal.ai'den beklenmedik yanıt.", "details": response.text}
-                
-                # Fal.ai'den gelen başarısız yanıtlar için 502 kullanmak doğrudur.
-                return JSONResponse(status_code=502, content=content) 
+        if response.status_code != 200:
+            try:
+                content = response.json()
+            except:
+                content = {"error": "Fal.ai'den beklenmedik yanıt.", "details": response.text}
+            return JSONResponse(status_code=502, content=content)
 
-            data = response.json()
-            return {"status": "success", "result": data}
+        data = response.json()
+        return {"status": "success", "result": data}
 
     except Exception as e:
-        error_details = traceback.format_exc()
-        print("Backend Hatası:", error_details)
-        
-        # Beklenmedik bir hata olursa 500 dön.
-        return JSONResponse(status_code=500, content={"error": "Sunucu içinde bir hata oluştu.", "details": str(e)})
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Sunucu hatası oluştu.", "details": str(e)},
+        )
