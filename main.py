@@ -24,9 +24,8 @@ CLOUD_NAME = os.getenv("CLOUD_NAME")
 CLOUD_API_KEY = os.getenv("CLOUD_API_KEY")
 CLOUD_API_SECRET = os.getenv("CLOUD_API_SECRET")
 
-# GÜNCELLENDİ: Sınav gereksinimi doğrultusunda 'nano-banana' (resmi Fal.ai yolu) modeline geçiş yapıldı.
-# nano-banana'nın resmi API yolu şudur:
-FAL_URL = "https://fal.run/fal-ai/gemini-2-5-flash-image-preview"
+# GÜNCELLENDİ: 'nano-banana' URL hatası nedeniyle sınav gereksinimindeki diğer model olan 'seedream-v4'e geçiş yapıldı.
+FAL_URL = "https://fal.run/fal-ai/seedream-v4" 
 
 # Cloudinary config
 try:
@@ -104,9 +103,7 @@ async def create_job(prompt: str = Form(...), image: UploadFile = File(...)):
             "Content-Type": "application/json"
         }
 
-        # Payload yapısı aynı kalıyor. nano-banana da prompt ve image_url bekler.
-        # İpucu: nano-banana ile daha iyi sonuç almak için prompt'a orijinal resmi tarif eden
-        # detaylar eklemek iyi olabilir.
+        # Payload yapısı seedream-v4 için de geçerlidir.
         payload = {
             "prompt": prompt,
             "image_url": public_url
